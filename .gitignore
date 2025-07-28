@@ -1,22 +1,107 @@
-build
-**.egg-info
-venv
-.DS_Store
-notebooks/*
-tests/__pycache__
+# Python
 __pycache__/
-.idea
-.coverage
-docs/*.html
-.ipynb_checkpoints/
-.tox/
-notebooks/chroma.sqlite3
-dist
-.env
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv/
+.env/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Application specific
+*.db
 *.sqlite
-htmlcov
-chroma.sqlite3
-*.bin
+*.sqlite3
+chroma_db/
+logs/
+data/
+.env
+.env.local
+.env.production
+
+# Ollama
+.ollama/
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Coverage reports
+htmlcov/
+.coverage
 .coverage.*
-milvus.db
-.milvus.db.lock
+coverage.xml
+*.cover
+.hypothesis/
+.pytest_cache/
+
+# Jupyter Notebook
+.ipynb_checkpoints
+
+# pyenv
+.python-version
+
+# pipenv
+Pipfile.lock
+
+# PEP 582
+__pypackages__/
+
+# Celery
+celerybeat-schedule
+celerybeat.pid
+
+# SageMath parsed files
+*.sage.py
+
+# Spyder project settings
+.spyderproject
+.spyproject
+
+# Rope project settings
+.ropeproject
+
+# mkdocs documentation
+/site
+
+# mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
