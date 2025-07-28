@@ -18,119 +18,162 @@ import uuid
 # Add the parent directory to the path to import vanna modules
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'src'))
 
-from vanna.ollama.ollama_chat import Ollama_Chat
-from vanna.chromadb.chromadb_vector import ChromaDB_VectorStore
+# Import the new FarsiVanna class
+from vanna.farsi_vanna import FarsiVanna
+
+# Import configuration
+from config import get_config
 
 # Configure logging
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-class FarsiVanna(ChromaDB_VectorStore, Ollama_Chat):
-    def __init__(self, config=None):
-        ChromaDB_VectorStore.__init__(self, config=config)
-        Ollama_Chat.__init__(self, config=config)
-        
-        # Initialize with Farsi prompts
-        self.farsi_prompts = {
-            "system": """شما یک دستیار هوشمند برای تولید کوئری SQL هستید. 
-            لطفاً سوالات فارسی را به SQL تبدیل کنید.
-            همیشه از بهترین شیوه‌های SQL استفاده کنید و نتایج را به فارسی توضیح دهید.""",
-            
-            "question_to_sql": """سوال کاربر: {question}
-            
-            لطفاً این سوال را به کوئری SQL تبدیل کنید. 
-            فقط کوئری SQL را برگردانید، بدون توضیح اضافی.""",
-            
-            "explain_results": """نتایج کوئری SQL:
-            {sql}
-            
-            داده‌های نتیجه:
-            {data}
-            
-            لطفاً این نتایج را به فارسی توضیح دهید."""
-        }
+# Get configuration
+config = get_config()
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'vanna-farsi-secret-key'
+app.config['SECRET_KEY'] = config.SECRET_KEY
 sock = Sock(app)
 
-# Initialize Vanna with local configuration
-vn = FarsiVanna(config={
-    'ollama_base_url': 'http://localhost:11434',
-    'model': 'llama2',
-    'chroma_db_impl': 'duckdb+parquet',
-    'persist_directory': './chroma_db'
+# Initialize Vanna with configuration
+vanna_config = config.get_vanna_config()
+vanna_config.update({
+    'ai_provider': config.AI_PROVIDER,
+    'vector_db_type': config.VECTOR_DB_TYPE,
 })
+
+vn = FarsiVanna(config=vanna_config)
+
+# Database connection function
+def get_database_connection():
+    """Get database connection based on configuration"""
+    if config.DATABASE_TYPE == 'postgresql':
+        import psycopg2
+        db_config = config.get_database_config()
+        if 'connection_string' in db_config:
+            # Parse connection string
+            conn_str = db_config['connection_string']
+            return psycopg2.connect(conn_str)
+        else:
+            return psycopg2.connect(
+                host=db_config['host'],
+                port=db_config['port'],
+                database=db_config['database'],
+                user=db_config['user'],
+                password=db_config['password']
+            )
+    else:
+        # SQLite
+        return sqlite3.connect('sample_data.db')
 
 # Sample database setup
 def setup_sample_database():
-    """Create a sample SQLite database with Persian data"""
-    conn = sqlite3.connect('sample_data.db')
+    """Create a sample database with Persian data"""
+    conn = get_database_connection()
     cursor = conn.cursor()
     
-    # Create tables
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS customers (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            email TEXT,
-            city TEXT,
-            registration_date DATE
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS orders (
-            id INTEGER PRIMARY KEY,
-            customer_id INTEGER,
-            product_name TEXT,
-            quantity INTEGER,
-            price REAL,
-            order_date DATE,
-            FOREIGN KEY (customer_id) REFERENCES customers (id)
-        )
-    ''')
-    
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS employees (
-            id INTEGER PRIMARY KEY,
-            name TEXT NOT NULL,
-            department TEXT,
-            salary REAL,
-            hire_date DATE
-        )
-    ''')
+    if config.DATABASE_TYPE == 'postgresql':
+        # PostgreSQL setup
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS customers (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                email VARCHAR(255),
+                city VARCHAR(100),
+                registration_date DATE
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS orders (
+                id SERIAL PRIMARY KEY,
+                customer_id INTEGER,
+                product_name VARCHAR(255),
+                quantity INTEGER,
+                price DECIMAL(10,2),
+                order_date DATE,
+                FOREIGN KEY (customer_id) REFERENCES customers (id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS employees (
+                id SERIAL PRIMARY KEY,
+                name VARCHAR(255) NOT NULL,
+                department VARCHAR(100),
+                salary DECIMAL(10,2),
+                hire_date DATE
+            )
+        ''')
+    else:
+        # SQLite setup
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS customers (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                email TEXT,
+                city TEXT,
+                registration_date DATE
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS orders (
+                id INTEGER PRIMARY KEY,
+                customer_id INTEGER,
+                product_name TEXT,
+                quantity INTEGER,
+                price REAL,
+                order_date DATE,
+                FOREIGN KEY (customer_id) REFERENCES customers (id)
+            )
+        ''')
+        
+        cursor.execute('''
+            CREATE TABLE IF NOT EXISTS employees (
+                id INTEGER PRIMARY KEY,
+                name TEXT NOT NULL,
+                department TEXT,
+                salary REAL,
+                hire_date DATE
+            )
+        ''')
     
     # Insert sample data
     customers_data = [
-        (1, 'علی احمدی', 'ali@example.com', 'تهران', '2023-01-15'),
-        (2, 'فاطمه محمدی', 'fateme@example.com', 'اصفهان', '2023-02-20'),
-        (3, 'محمد رضایی', 'mohammad@example.com', 'مشهد', '2023-03-10'),
-        (4, 'زهرا کریمی', 'zahra@example.com', 'شیراز', '2023-04-05'),
-        (5, 'حسن نوری', 'hasan@example.com', 'تبریز', '2023-05-12'),
+        ('علی احمدی', 'ali@example.com', 'تهران', '2023-01-15'),
+        ('فاطمه محمدی', 'fateme@example.com', 'اصفهان', '2023-02-20'),
+        ('محمد رضایی', 'mohammad@example.com', 'مشهد', '2023-03-10'),
+        ('زهرا کریمی', 'zahra@example.com', 'شیراز', '2023-04-05'),
+        ('حسن نوری', 'hasan@example.com', 'تبریز', '2023-05-12'),
     ]
     
     orders_data = [
-        (1, 1, 'لپ‌تاپ', 1, 25000000, '2023-06-01'),
-        (2, 2, 'موبایل', 2, 15000000, '2023-06-05'),
-        (3, 3, 'تبلت', 1, 12000000, '2023-06-10'),
-        (4, 4, 'لپ‌تاپ', 1, 28000000, '2023-06-15'),
-        (5, 5, 'موبایل', 1, 16000000, '2023-06-20'),
-        (6, 1, 'تبلت', 1, 11000000, '2023-07-01'),
-        (7, 2, 'لپ‌تاپ', 1, 26000000, '2023-07-05'),
+        (1, 'لپ‌تاپ', 1, 25000000, '2023-06-01'),
+        (2, 'موبایل', 2, 15000000, '2023-06-05'),
+        (3, 'تبلت', 1, 12000000, '2023-06-10'),
+        (4, 'لپ‌تاپ', 1, 28000000, '2023-06-15'),
+        (5, 'موبایل', 1, 16000000, '2023-06-20'),
+        (1, 'تبلت', 1, 11000000, '2023-07-01'),
+        (2, 'لپ‌تاپ', 1, 26000000, '2023-07-05'),
     ]
     
     employees_data = [
-        (1, 'احمد رضایی', 'فروش', 45000000, '2022-01-01'),
-        (2, 'مریم احمدی', 'مالی', 38000000, '2022-02-01'),
-        (3, 'علی محمدی', 'فروش', 42000000, '2022-03-01'),
-        (4, 'فاطمه کریمی', 'فناوری اطلاعات', 55000000, '2022-04-01'),
-        (5, 'محمد نوری', 'فروش', 40000000, '2022-05-01'),
+        ('احمد رضایی', 'فروش', 45000000, '2022-01-01'),
+        ('مریم احمدی', 'مالی', 38000000, '2022-02-01'),
+        ('علی محمدی', 'فروش', 42000000, '2022-03-01'),
+        ('فاطمه کریمی', 'فناوری اطلاعات', 55000000, '2022-04-01'),
+        ('محمد نوری', 'فروش', 40000000, '2022-05-01'),
     ]
     
-    cursor.executemany('INSERT OR REPLACE INTO customers VALUES (?, ?, ?, ?, ?)', customers_data)
-    cursor.executemany('INSERT OR REPLACE INTO orders VALUES (?, ?, ?, ?, ?, ?)', orders_data)
-    cursor.executemany('INSERT OR REPLACE INTO employees VALUES (?, ?, ?, ?, ?)', employees_data)
+    # Clear existing data and insert new data
+    cursor.execute('DELETE FROM orders')
+    cursor.execute('DELETE FROM customers')
+    cursor.execute('DELETE FROM employees')
+    
+    cursor.executemany('INSERT INTO customers (name, email, city, registration_date) VALUES (%s, %s, %s, %s)', customers_data)
+    cursor.executemany('INSERT INTO orders (customer_id, product_name, quantity, price, order_date) VALUES (%s, %s, %s, %s, %s)', orders_data)
+    cursor.executemany('INSERT INTO employees (name, department, salary, hire_date) VALUES (%s, %s, %s, %s)', employees_data)
     
     conn.commit()
     conn.close()
@@ -140,33 +183,64 @@ def train_model():
     """Train the model with sample database schema and data"""
     try:
         # Train with DDL
-        vn.train(ddl="""
-            CREATE TABLE customers (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                email TEXT,
-                city TEXT,
-                registration_date DATE
-            );
-            
-            CREATE TABLE orders (
-                id INTEGER PRIMARY KEY,
-                customer_id INTEGER,
-                product_name TEXT,
-                quantity INTEGER,
-                price REAL,
-                order_date DATE,
-                FOREIGN KEY (customer_id) REFERENCES customers (id)
-            );
-            
-            CREATE TABLE employees (
-                id INTEGER PRIMARY KEY,
-                name TEXT NOT NULL,
-                department TEXT,
-                salary REAL,
-                hire_date DATE
-            );
-        """)
+        if config.DATABASE_TYPE == 'postgresql':
+            ddl = """
+                CREATE TABLE customers (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    email VARCHAR(255),
+                    city VARCHAR(100),
+                    registration_date DATE
+                );
+                
+                CREATE TABLE orders (
+                    id SERIAL PRIMARY KEY,
+                    customer_id INTEGER,
+                    product_name VARCHAR(255),
+                    quantity INTEGER,
+                    price DECIMAL(10,2),
+                    order_date DATE,
+                    FOREIGN KEY (customer_id) REFERENCES customers (id)
+                );
+                
+                CREATE TABLE employees (
+                    id SERIAL PRIMARY KEY,
+                    name VARCHAR(255) NOT NULL,
+                    department VARCHAR(100),
+                    salary DECIMAL(10,2),
+                    hire_date DATE
+                );
+            """
+        else:
+            ddl = """
+                CREATE TABLE customers (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    email TEXT,
+                    city TEXT,
+                    registration_date DATE
+                );
+                
+                CREATE TABLE orders (
+                    id INTEGER PRIMARY KEY,
+                    customer_id INTEGER,
+                    product_name TEXT,
+                    quantity INTEGER,
+                    price REAL,
+                    order_date DATE,
+                    FOREIGN KEY (customer_id) REFERENCES customers (id)
+                );
+                
+                CREATE TABLE employees (
+                    id INTEGER PRIMARY KEY,
+                    name TEXT NOT NULL,
+                    department TEXT,
+                    salary REAL,
+                    hire_date DATE
+                );
+            """
+        
+        vn.train(ddl=ddl)
         
         # Train with sample queries
         sample_queries = [
@@ -207,7 +281,7 @@ def ask_question():
         
         # Execute SQL
         try:
-            conn = sqlite3.connect('sample_data.db')
+            conn = get_database_connection()
             df = pd.read_sql_query(sql, conn)
             conn.close()
             
@@ -281,7 +355,7 @@ def process_question(question):
     try:
         sql = vn.generate_sql(question)
         if sql:
-            conn = sqlite3.connect('sample_data.db')
+            conn = get_database_connection()
             df = pd.read_sql_query(sql, conn)
             conn.close()
             

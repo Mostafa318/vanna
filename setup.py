@@ -9,223 +9,156 @@ This script helps users set up the application with proper configuration.
 import os
 import sys
 import subprocess
-import platform
-import json
+import shutil
 from pathlib import Path
-
-def print_banner():
-    """Print application banner"""
-    banner = """
-╔══════════════════════════════════════════════════════════════╗
-║                    وانا فارسی - نسخه محلی                    ║
-║                دستیار هوشمند SQL به زبان فارسی                ║
-╚══════════════════════════════════════════════════════════════╝
-    """
-    print(banner)
 
 def check_python_version():
     """Check if Python version is compatible"""
     if sys.version_info < (3, 8):
-        print("❌ خطا: Python 3.8 یا بالاتر مورد نیاز است")
-        print(f"نسخه فعلی: {sys.version}")
-        return False
-    print(f"✅ Python {sys.version.split()[0]} - OK")
-    return True
+        print("❌ Python 3.8 or higher is required")
+        sys.exit(1)
+    print(f"✅ Python {sys.version_info.major}.{sys.version_info.minor} detected")
 
-def install_ollama():
-    """Install Ollama based on the operating system"""
-    system = platform.system().lower()
-    
-    print("\n🔧 نصب Ollama...")
-    
-    if system == "linux":
-        print("در حال نصب Ollama برای Linux...")
-        try:
-            subprocess.run([
-                "curl", "-fsSL", "https://ollama.ai/install.sh"
-            ], shell=True, check=True)
-            print("✅ Ollama نصب شد")
-            return True
-        except subprocess.CalledProcessError:
-            print("❌ خطا در نصب Ollama")
-            return False
-    
-    elif system == "darwin":  # macOS
-        print("در حال نصب Ollama برای macOS...")
-        try:
-            subprocess.run(["brew", "install", "ollama"], check=True)
-            print("✅ Ollama نصب شد")
-            return True
-        except subprocess.CalledProcessError:
-            print("❌ خطا در نصب Ollama. لطفاً Homebrew را نصب کنید")
-            return False
-    
-    elif system == "windows":
-        print("❌ برای Windows، لطفاً Ollama را از https://ollama.ai دانلود کنید")
-        return False
-    
-    else:
-        print(f"❌ سیستم عامل {system} پشتیبانی نمی‌شود")
-        return False
-
-def install_python_dependencies():
-    """Install Python dependencies"""
-    print("\n📦 نصب وابستگی‌های Python...")
-    
+def install_dependencies():
+    """Install required dependencies"""
+    print("📦 Installing dependencies...")
     try:
-        subprocess.run([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"], check=True)
-        print("✅ وابستگی‌های Python نصب شدند")
-        return True
+        subprocess.check_call([sys.executable, "-m", "pip", "install", "-r", "requirements.txt"])
+        print("✅ Dependencies installed successfully")
     except subprocess.CalledProcessError:
-        print("❌ خطا در نصب وابستگی‌های Python")
-        return False
+        print("❌ Failed to install dependencies")
+        sys.exit(1)
 
-def download_ollama_model():
-    """Download Ollama model"""
-    print("\n🤖 دانلود مدل Ollama...")
+def setup_environment():
+    """Setup environment configuration"""
+    print("🔧 Setting up environment...")
     
-    try:
-        # Start Ollama service
-        subprocess.run(["ollama", "serve"], start_new_session=True)
-        
-        # Wait a moment for service to start
-        import time
-        time.sleep(3)
-        
-        # Download model
-        subprocess.run(["ollama", "pull", "llama2"], check=True)
-        print("✅ مدل llama2 دانلود شد")
-        return True
-    except subprocess.CalledProcessError:
-        print("❌ خطا در دانلود مدل")
-        return False
-
-def create_env_file():
-    """Create .env file with default configuration"""
-    env_content = """# Vanna Farsi Configuration
-
-# Flask settings
-SECRET_KEY=vanna-farsi-secret-key-change-in-production
-DEBUG=True
-HOST=0.0.0.0
-PORT=5000
-
-# Database settings
-DATABASE_TYPE=sqlite
-DATABASE_URL=sqlite:///sample_data.db
-
-# Ollama settings
-OLLAMA_BASE_URL=http://localhost:11434
-OLLAMA_MODEL=llama2
-
-# Vanna settings
-VECTOR_DB_TYPE=chromadb
-VECTOR_DB_PATH=./chroma_db
-
-# Sample data
-SAMPLE_DATA_ENABLED=True
-
-# Logging
-LOG_LEVEL=INFO
-LOG_FILE=vanna_farsi.log
-"""
+    env_file = Path(".env")
+    if env_file.exists():
+        print("⚠️  .env file already exists. Skipping environment setup.")
+        return
     
-    if not os.path.exists('.env'):
-        with open('.env', 'w', encoding='utf-8') as f:
-            f.write(env_content)
-        print("✅ فایل .env ایجاد شد")
+    # Copy example environment file
+    example_env = Path(".env.example")
+    if example_env.exists():
+        shutil.copy(example_env, env_file)
+        print("✅ Environment file created from .env.example")
+        print("📝 Please edit .env file with your configuration")
     else:
-        print("ℹ️ فایل .env از قبل وجود دارد")
+        print("❌ .env.example file not found")
 
-def create_directories():
-    """Create necessary directories"""
-    directories = ['chroma_db', 'logs', 'data']
+def setup_database():
+    """Setup database configuration"""
+    print("🗄️  Database setup options:")
+    print("1. SQLite (default, no setup required)")
+    print("2. PostgreSQL (requires Docker or local PostgreSQL)")
     
-    for directory in directories:
-        Path(directory).mkdir(exist_ok=True)
+    choice = input("Choose database type (1/2): ").strip()
     
-    print("✅ دایرکتوری‌های مورد نیاز ایجاد شدند")
-
-def run_tests():
-    """Run basic tests"""
-    print("\n🧪 اجرای تست‌های اولیه...")
-    
-    try:
-        # Test Ollama connection
-        import requests
-        response = requests.get('http://localhost:11434/api/tags', timeout=5)
-        if response.status_code == 200:
-            print("✅ اتصال به Ollama موفق")
+    if choice == "2":
+        print("🐘 PostgreSQL setup:")
+        print("1. Use Docker Compose (recommended)")
+        print("2. Use local PostgreSQL installation")
+        
+        db_choice = input("Choose setup method (1/2): ").strip()
+        
+        if db_choice == "1":
+            setup_postgresql_docker()
         else:
-            print("❌ خطا در اتصال به Ollama")
-            return False
-    except Exception as e:
-        print(f"❌ خطا در تست Ollama: {e}")
-        return False
+            print("📝 Please configure PostgreSQL connection in .env file")
+
+def setup_postgresql_docker():
+    """Setup PostgreSQL using Docker"""
+    print("🐳 Setting up PostgreSQL with Docker...")
     
-    return True
+    # Check if Docker is available
+    try:
+        subprocess.run(["docker", "--version"], check=True, capture_output=True)
+    except (subprocess.CalledProcessError, FileNotFoundError):
+        print("❌ Docker is not installed or not available")
+        print("📝 Please install Docker or configure PostgreSQL manually")
+        return
+    
+    # Start PostgreSQL container
+    try:
+        subprocess.run(["docker-compose", "-f", "docker-compose.postgresql.yml", "up", "-d"], check=True)
+        print("✅ PostgreSQL container started")
+        print("📊 pgAdmin available at http://localhost:5050")
+        print("   Email: admin@vanna.com")
+        print("   Password: admin123")
+    except subprocess.CalledProcessError:
+        print("❌ Failed to start PostgreSQL container")
 
-def print_next_steps():
-    """Print next steps for the user"""
-    next_steps = """
-🎉 نصب و راه‌اندازی کامل شد!
+def setup_ai_provider():
+    """Setup AI provider configuration"""
+    print("🤖 AI Provider setup options:")
+    print("1. Ollama (local, requires Ollama installation)")
+    print("2. OpenAI (cloud, requires API key)")
+    
+    choice = input("Choose AI provider (1/2): ").strip()
+    
+    if choice == "2":
+        print("🔑 OpenAI setup:")
+        api_key = input("Enter your OpenAI API key: ").strip()
+        
+        if api_key:
+            # Update .env file
+            update_env_file("AI_PROVIDER", "openai")
+            update_env_file("OPENAI_API_KEY", api_key)
+            print("✅ OpenAI configuration updated")
+        else:
+            print("⚠️  No API key provided. Please update .env file manually")
 
-📋 مراحل بعدی:
-
-1. اطمینان حاصل کنید که Ollama در حال اجرا است:
-   ollama serve
-
-2. برنامه را اجرا کنید:
-   python app.py
-
-3. مرورگر را باز کنید و به آدرس زیر بروید:
-   http://localhost:5000
-
-4. سوالات خود را به فارسی بپرسید!
-
-📚 راهنما:
-- برای تغییر تنظیمات، فایل .env را ویرایش کنید
-- برای استفاده از مدل‌های دیگر، فایل config.py را بررسی کنید
-- برای پشتیبانی، issues در GitHub ارسال کنید
-
-🔗 لینک‌های مفید:
-- مستندات Ollama: https://ollama.ai/docs
-- مدل‌های موجود: https://ollama.ai/library
-    """
-    print(next_steps)
+def update_env_file(key, value):
+    """Update a key in .env file"""
+    env_file = Path(".env")
+    if not env_file.exists():
+        return
+    
+    lines = env_file.read_text().splitlines()
+    updated = False
+    
+    for i, line in enumerate(lines):
+        if line.startswith(f"{key}="):
+            lines[i] = f"{key}={value}"
+            updated = True
+            break
+    
+    if not updated:
+        lines.append(f"{key}={value}")
+    
+    env_file.write_text("\n".join(lines))
 
 def main():
     """Main setup function"""
-    print_banner()
+    print("🚀 Vanna Farsi Setup")
+    print("=" * 50)
     
     # Check Python version
-    if not check_python_version():
-        sys.exit(1)
+    check_python_version()
     
-    # Create directories
-    create_directories()
+    # Install dependencies
+    install_dependencies()
     
-    # Install Python dependencies
-    if not install_python_dependencies():
-        sys.exit(1)
+    # Setup environment
+    setup_environment()
     
-    # Install Ollama
-    if not install_ollama():
-        print("⚠️ نصب Ollama ناموفق بود. لطفاً به صورت دستی نصب کنید")
+    # Setup database
+    setup_database()
     
-    # Download model
-    if not download_ollama_model():
-        print("⚠️ دانلود مدل ناموفق بود. لطفاً به صورت دستی دانلود کنید")
+    # Setup AI provider
+    setup_ai_provider()
     
-    # Create environment file
-    create_env_file()
+    print("\n🎉 Setup completed!")
+    print("\n📋 Next steps:")
+    print("1. Edit .env file with your configuration")
+    print("2. Run: python app.py")
+    print("3. Open http://localhost:5000 in your browser")
     
-    # Run tests
-    if not run_tests():
-        print("⚠️ برخی تست‌ها ناموفق بودند")
-    
-    # Print next steps
-    print_next_steps()
+    print("\n📚 Documentation:")
+    print("- README.md: General information")
+    print("- QUICK_START.md: Quick start guide")
+    print("- .env.example: Configuration options")
 
 if __name__ == "__main__":
     main()
